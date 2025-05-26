@@ -127,25 +127,36 @@ DropStaleResponse(i, j, m) ==
 \* Modified. Leader i receives a client request to add v to the log. up to MaxClientRequests.
 ClientRequest(i, v) ==
     /\ state[i] = Leader
-    /\ maxc < MaxClientRequests 
-    /\ LET entryTerm == currentTerm[i]
-           entry == [term |-> entryTerm, value |-> v]
-           entryExists == \E j \in DOMAIN log[i] : log[i][j].value = v /\ log[i][j].term = entryTerm
-           newLog == IF entryExists THEN log[i] ELSE Append(log[i], entry)
-           newEntryIndex == Len(log[i]) + 1
-           newEntryKey == <<newEntryIndex, entryTerm>>
-       IN
-        /\ log' = [log EXCEPT ![i] = newLog]
-        /\ maxc' = IF entryExists THEN maxc ELSE maxc + 1
-        /\ entryCommitStats' =
-              IF ~entryExists /\ newEntryIndex > 0 \* Only add stats for truly new entries
-              THEN entryCommitStats @@ (newEntryKey :> [ sentCount |-> 0, ackCount |-> 0, committed |-> FALSE ])
-              ELSE entryCommitStats
-    /\ UNCHANGED <<messages, serverVars, candidateVars, leaderVars, commitIndex, leaderCount>>
+    /\ maxc < MaxClientRequests
+    /\ LET id   == maxc + 1
+    \* Creating the metadata
+         entry == [ term |-> currentTerm[i]
+                  , id   |-> id
+                  , kind |-> OrderMeta ]
+       IN  log'    = [log EXCEPT ![i] = Append(log[i], entry)]
+    /\ maxc' = id
+    /\ UNCHANGED <<messages, serverVars, candidateVars,
+                   leaderVars, commitIndex,
+                   unorderedPayloads, leaderCount,
+                   entryCommitStats>>
 
 \* Modified. Leader i sends j an AppendEntries request containing exactly 1 entry. It was up to 1 entry.
 \* While implementations may want to send more than 1 at a time, this spec uses
 \* just 1 because it minimizes atomic regions without loss of generality.
+
+\* Model the Switch multicast
+SwitchDeliver(v) ==
+    /\ LET msg == [ mtype   |-> ClientPayload
+                   , mid     |-> maxc + 1  
+                   , mpayload|-> v
+                   , msource |-> "switch" 
+                   , mdest   |-> Server
+                   ]
+       IN  Send(msg)
+    /\ UNCHANGED <<serverVars, candidateVars, leaderVars,
+                   logVars, unorderedPayloads,
+                   maxc, leaderCount, entryCommitStats>>
+
 AppendEntries(i, j) ==
     /\ i /= j
     /\ state[i] = Leader

@@ -73,6 +73,15 @@ MyConstraint == (\A i \in Server: currentTerm[i] <= MaxTerm /\ Len(log[i]) <= Ma
 
 Symmetry == Permutations(Server)
 
+HasPayload(i, idx) == \E v \in payloadBuf[i] : \* assumes value itself is the key
+                       \A j \in DOMAIN log[i] : j = idx => v = log[i][j].value
+
+OtherUnchanged == UNCHANGED << serverVars,
+                                candidateVars,
+                                leaderVars,
+                                logVars,
+                                instrumentationVars >>
+
 \* new bag of messages with one more m in it. the following from orig spec necessary for Drop
 \*WithMessage(m, msgs) ==
 \*    IF m \in DOMAIN msgs THEN
